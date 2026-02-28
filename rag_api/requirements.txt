@@ -1,30 +1,158 @@
-# VetrIAge RAG System Dependencies
-# Install with: pip install -r requirements.txt
-# Or with uv: uv pip install -r requirements.txt
+# VetrIAge Enhanced RAG System - Complete Dependencies
+# Version: 2.1.0
+# =======================================================
 
-# Core dependencies
-biopython>=1.83           # PubMed API access via Entrez
-openai>=1.12.0           # OpenAI embeddings and API
-anthropic>=0.21.0        # Claude LLM for diagnosis
-numpy>=1.24.0            # Numerical operations
+# Core Scientific Libraries
+# -------------------------
+biopython>=1.83          # PubMed/Medline access via Entrez
+numpy>=1.24.0            # Numerical computing
+scipy>=1.11.0            # Scientific computing
 requests>=2.31.0         # HTTP requests
-python-dotenv>=1.0.0     # Environment variables
+python-dotenv>=1.0.0     # Environment variable management
 
-# Vector search (choose one)
-faiss-cpu>=1.7.4         # FAISS vector search (CPU version) - for development
-# faiss-gpu>=1.7.4       # FAISS GPU version (faster, requires CUDA) - uncomment for production
-# pgvector>=0.2.0        # PostgreSQL vector extension - uncomment for production with PostgreSQL
+# AI/ML - OpenAI & Anthropic
+# ---------------------------
+openai>=1.12.0           # OpenAI API (embeddings, GPT)
+anthropic>=0.21.0        # Claude API (LLM inference)
 
-# Optional but recommended
-langchain>=0.1.9         # RAG orchestration framework
-tenacity>=8.2.3          # Retry logic with exponential backoff
+# Vector Store & Search
+# ----------------------
+faiss-cpu>=1.7.4         # Facebook AI Similarity Search (CPU version)
+# faiss-gpu>=1.7.4       # Uncomment for GPU support
+# pgvector>=0.2.0        # Uncomment for PostgreSQL vector store
+
+# Web Framework
+# -------------
+fastapi>=0.109.0         # Modern web framework
+uvicorn[standard]>=0.27.0  # ASGI server
 pydantic>=2.0.0          # Data validation
-tqdm>=4.66.0             # Progress bars
-scikit-learn>=1.3.0      # ML utilities and metrics
+python-multipart>=0.0.6  # File upload support
 
-# Development/Testing
+# PDF Generation & Reports
+# --------------------------
+reportlab>=4.0.0         # PDF generation library
+Pillow>=10.0.0           # Image processing
+matplotlib>=3.8.0        # Chart generation
+# pdfkit>=1.0.0          # HTML to PDF (requires wkhtmltopdf)
+
+# Data Processing
+# ---------------
+pandas>=2.1.0            # Data analysis (optional but recommended)
+
+# NLP & Language Processing
+# --------------------------
+# transformers>=4.36.0   # Uncomment for BioGPT embeddings (future)
+# torch>=2.1.0           # Uncomment for BioGPT embeddings (future)
+# tokenizers>=0.15.0     # Uncomment for BioGPT embeddings (future)
+
+# Additional Utilities
+# --------------------
+langchain>=0.1.9         # LLM framework utilities
+tenacity>=8.2.3          # Retry logic
+tqdm>=4.66.0             # Progress bars
+scikit-learn>=1.3.0      # Machine learning utilities
+
+# Testing & Development
+# ----------------------
 pytest>=7.4.0            # Testing framework
-pytest-asyncio>=0.21.0   # Async testing
+pytest-asyncio>=0.21.0   # Async test support
 pytest-cov>=4.1.0        # Code coverage
 black>=23.0.0            # Code formatting
 mypy>=1.5.0              # Type checking
+flake8>=6.1.0            # Linting
+
+# Production Deployment
+# ----------------------
+gunicorn>=21.2.0         # Production WSGI server
+redis>=5.0.0             # Caching (optional)
+celery>=5.3.0            # Background tasks (optional)
+
+# Monitoring & Logging
+# ---------------------
+prometheus-client>=0.19.0  # Metrics collection (optional)
+sentry-sdk>=1.40.0       # Error tracking (optional)
+
+# Email Delivery
+# --------------
+# sendgrid>=6.11.0       # Email service (optional)
+# python-smtp>=0.3.0     # SMTP support (optional)
+
+# Security
+# --------
+cryptography>=41.0.0     # Encryption utilities
+python-jose[cryptography]>=3.3.0  # JWT tokens
+
+# Database (Optional)
+# -------------------
+# psycopg2-binary>=2.9.0  # PostgreSQL adapter
+# sqlalchemy>=2.0.0       # ORM
+# alembic>=1.13.0         # Database migrations
+
+# Cloud Storage (Optional)
+# -------------------------
+# boto3>=1.34.0           # AWS S3
+# google-cloud-storage>=2.14.0  # Google Cloud Storage
+# azure-storage-blob>=12.19.0   # Azure Blob Storage
+
+# ==========================================
+# INSTALLATION INSTRUCTIONS
+# ==========================================
+
+# Standard Installation (CPU):
+# pip install -r requirements.txt
+
+# GPU Support (CUDA-enabled systems):
+# pip install -r requirements.txt
+# pip uninstall faiss-cpu
+# pip install faiss-gpu
+
+# PostgreSQL Vector Store:
+# pip install -r requirements.txt
+# pip install pgvector psycopg2-binary
+
+# Full Production Setup:
+# pip install -r requirements.txt
+# pip install redis celery prometheus-client sentry-sdk
+
+# Development Environment:
+# pip install -r requirements.txt
+# pip install -r requirements-dev.txt  # If you have one
+
+# ==========================================
+# SYSTEM DEPENDENCIES (must be installed separately)
+# ==========================================
+
+# For pdfkit (HTML to PDF):
+# Ubuntu/Debian: sudo apt-get install wkhtmltopdf
+# macOS: brew install wkhtmltopdf
+# Windows: Download from wkhtmltopdf.org
+
+# For PostgreSQL with pgvector:
+# Ubuntu/Debian: sudo apt-get install postgresql postgresql-contrib
+# Then: CREATE EXTENSION vector;
+
+# ==========================================
+# OPTIONAL PERFORMANCE OPTIMIZATIONS
+# ==========================================
+
+# For faster numpy operations:
+# Intel MKL: pip install mkl
+
+# For GPU-accelerated embeddings (future):
+# CUDA Toolkit 11.8+
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# ==========================================
+# VERSION COMPATIBILITY
+# ==========================================
+
+# Tested with:
+# - Python 3.9, 3.10, 3.11, 3.12
+# - Ubuntu 20.04+, macOS 12+, Windows 10+
+# - CPU: x86_64, ARM64 (M1/M2 Macs)
+# - GPU: CUDA 11.8+ (optional)
+
+# Minimum system requirements:
+# - 4 GB RAM (8 GB recommended)
+# - 2 GB disk space
+# - Internet connection (for API calls)

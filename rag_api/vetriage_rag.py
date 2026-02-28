@@ -5,8 +5,15 @@ VetrIAge RAG (Retrieval-Augmented Generation) System
 Complete RAG pipeline for veterinary diagnostics with PubMed integration.
 Implements the architecture described in the SKILL.md specification.
 
+NEW in v2.1:
+- Clinical reports generation (SOAP format, PDF/HTML)
+- Citation management (APA, Vancouver, Harvard, Chicago)
+- Clinical decision support with drug safety alerts
+- bioRxiv pre-print access (+20% literature)
+- Species-specific contraindication database
+
 Author: VetrIAge Team
-Version: 2.0
+Version: 2.1
 License: MIT
 """
 
