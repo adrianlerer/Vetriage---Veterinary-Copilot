@@ -1,0 +1,93 @@
+# VetrIAge Veterinary Copilot - Git Ignore
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# FAISS indices (large files)
+*.index
+*.faiss
+
+# Embeddings cache
+embeddings_cache.pkl
+*.pkl
+
+# Logs
+*.log
+logs/
+supervisord.log
+supervisord.pid
+supervisor.sock
+webserver.log
+webserver_error.log
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# API keys backup (just in case)
+*.key
+secrets/
+
+# Documentation builds
+docs/_build/
+docs/.build/
+
+# Temporary files
+*.tmp
+temp/
+tmp/
+
+# Scientific skills reference (large)
+# scientific-skills-ref/  # Uncomment if repo is too large
