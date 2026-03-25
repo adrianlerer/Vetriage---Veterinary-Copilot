@@ -293,12 +293,14 @@ async def safety_check(request: SafetyCheckRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/v2/search-literature")
-async def search_literature(
-    query: str = Field(..., description="Search query"),
-    include_preprints: bool = Field(True, description="Include pre-prints"),
+class LiteratureSearchRequest(BaseModel):
+    query: str = Field(..., description="Search query")
+    include_preprints: bool = Field(True, description="Include pre-prints")
     max_results: int = Field(20, description="Maximum results")
-):
+
+
+@app.post("/api/v2/search-literature")
+async def search_literature(request: LiteratureSearchRequest):
     """
     Search veterinary literature (PubMed + bioRxiv)
     
@@ -317,7 +319,7 @@ async def search_literature(
         }
         
         # Search PubMed
-        pubmed_ids = enhanced_rag.rag.search_pubmed_veterinary(query, max_results)
+        pubmed_ids = enhanced_rag.rag.search_pubmed_veterinary(request.query, request.max_results)
         if pubmed_ids:
             papers = enhanced_rag.rag.fetch_papers(pubmed_ids)
             results["pubmed_papers"] = [
@@ -329,18 +331,18 @@ async def search_literature(
                     "journal": getattr(p, 'journal', 'Unknown'),
                     "date": getattr(p, 'date', 'Unknown')
                 }
-                for p in papers[:max_results]
+                for p in papers[:request.max_results]
             ]
-        
+
         # Search bioRxiv if enabled
-        if include_preprints and enhanced_rag.enable_biorxiv:
+        if request.include_preprints and enhanced_rag.enable_biorxiv:
             from biorxiv_integration import search_veterinary_preprints
-            preprints = search_veterinary_preprints(query, max_results=10)
+            preprints = search_veterinary_preprints(request.query, max_results=10)
             results["preprints"] = preprints
-        
+
         return {
             "status": "success",
-            "query": query,
+            "query": request.query,
             "total_results": len(results["pubmed_papers"]) + len(results["preprints"]),
             "results": results
         }
