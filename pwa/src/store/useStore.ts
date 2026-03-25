@@ -6,7 +6,7 @@ export const useStore = create<AppState>()(
   persist(
     (set) => ({
       settings: {
-        apiUrl: 'http://localhost:8000',
+        apiUrl: 'https://vetriage-api.onrender.com',
         darkMode: false,
       },
       currentCase: null,
