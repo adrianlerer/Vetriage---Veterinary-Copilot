@@ -34,12 +34,17 @@ try:
     HAS_OPENAI = True
 except ImportError:
     HAS_OPENAI = False
-    
+
 try:
     import anthropic
     HAS_ANTHROPIC = True
 except ImportError:
     HAS_ANTHROPIC = False
+
+# OpenRouter support (uses OpenAI SDK with custom base_url)
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+USE_OPENROUTER = bool(OPENROUTER_API_KEY)
 
 try:
     import faiss
@@ -57,7 +62,8 @@ NCBI_API_KEY = os.getenv("NCBI_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
-LLM_MODEL = os.getenv("LLM_MODEL", "claude-3-5-sonnet-20241022")
+LLM_MODEL = os.getenv("LLM_MODEL", "anthropic/claude-3.5-sonnet" if USE_OPENROUTER else "claude-3-5-sonnet-20241022")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "anthropic/claude-3.5-sonnet")
 MAX_PAPERS_PER_QUERY = int(os.getenv("MAX_PAPERS_PER_QUERY", "10"))
 
 # Configure Entrez
@@ -111,12 +117,26 @@ class VetriageRAG:
         else:
             self.openai_client = None
             logger.warning("OpenAI client not available. Install openai package and provide API key.")
-        
-        if HAS_ANTHROPIC and self.anthropic_key:
+
+        # OpenRouter client (uses OpenAI SDK with custom base_url)
+        self.openrouter_client = None
+        if USE_OPENROUTER and HAS_OPENAI:
+            self.openrouter_client = openai.OpenAI(
+                base_url=OPENROUTER_BASE_URL,
+                api_key=OPENROUTER_API_KEY,
+                default_headers={
+                    "HTTP-Referer": "https://vetriage.app",
+                    "X-Title": "Vetriage - Veterinary Copilot",
+                }
+            )
+            logger.info(f"OpenRouter client initialized (model: {OPENROUTER_MODEL})")
+
+        if HAS_ANTHROPIC and self.anthropic_key and not USE_OPENROUTER:
             self.anthropic_client = anthropic.Anthropic(api_key=self.anthropic_key)
         else:
             self.anthropic_client = None
-            logger.warning("Anthropic client not available. Install anthropic package and provide API key.")
+            if not USE_OPENROUTER:
+                logger.warning("Anthropic client not available. Install anthropic package and provide API key.")
         
         # Vector store
         self.index = None
@@ -124,6 +144,45 @@ class VetriageRAG:
         
         logger.info("VetriageRAG initialized successfully")
     
+    def _llm_chat(self, prompt: str, max_tokens: int = 4000, model: Optional[str] = None) -> Optional[str]:
+        """
+        Send a chat completion request via OpenRouter (preferred) or Anthropic fallback.
+
+        Args:
+            prompt: User prompt text
+            max_tokens: Maximum response tokens
+            model: Override model name
+
+        Returns:
+            Response text or None on failure
+        """
+        # Try OpenRouter first
+        if self.openrouter_client:
+            try:
+                response = self.openrouter_client.chat.completions.create(
+                    model=model or OPENROUTER_MODEL,
+                    max_tokens=max_tokens,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                logger.error(f"OpenRouter request failed: {e}")
+                # Fall through to Anthropic
+
+        # Fallback to Anthropic direct
+        if self.anthropic_client:
+            try:
+                message = self.anthropic_client.messages.create(
+                    model=model or LLM_MODEL,
+                    max_tokens=max_tokens,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                return message.content[0].text
+            except Exception as e:
+                logger.error(f"Anthropic request failed: {e}")
+
+        return None
+
     def expand_query(self, case: Dict, num_queries: int = 4) -> List[str]:
         """
         Generate optimized PubMed search queries from clinical case.
@@ -135,13 +194,13 @@ class VetriageRAG:
         Returns:
             List of optimized PubMed search query strings
         """
-        if not self.anthropic_client:
-            logger.warning("Anthropic client not available. Using fallback query generation.")
+        if not self.openrouter_client and not self.anthropic_client:
+            logger.warning("No LLM client available. Using fallback query generation.")
             return self._fallback_query_expansion(case)
-        
+
         # Build prompt for query expansion
         case_summary = self._summarize_case(case)
-        
+
         prompt = f"""Generate {num_queries} optimized PubMed search queries for this veterinary case.
 
 Case Summary:
@@ -159,21 +218,14 @@ Example format:
 feline diabetes mellitus hyperglycemia ketoacidosis
 steroid-induced diabetes cat prednisolone treatment
 """
-        
-        try:
-            message = self.anthropic_client.messages.create(
-                model="claude-3-5-sonnet-20241022",
-                max_tokens=500,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            
-            queries = [q.strip() for q in message.content[0].text.strip().split('\n') if q.strip()]
+
+        response_text = self._llm_chat(prompt, max_tokens=500)
+        if response_text:
+            queries = [q.strip() for q in response_text.strip().split('\n') if q.strip()]
             logger.info(f"Generated {len(queries)} search queries")
             return queries[:num_queries]
-        
-        except Exception as e:
-            logger.error(f"Query expansion failed: {e}")
-            return self._fallback_query_expansion(case)
+
+        return self._fallback_query_expansion(case)
     
     def _fallback_query_expansion(self, case: Dict) -> List[str]:
         """Fallback query generation without LLM"""
@@ -557,14 +609,8 @@ Format response as JSON:
         prompt = self.inject_context(case, relevant_papers)
         
         try:
-            if self.anthropic_client:
-                message = self.anthropic_client.messages.create(
-                    model=LLM_MODEL,
-                    max_tokens=4000,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                response_text = message.content[0].text
-            else:
+            response_text = self._llm_chat(prompt, max_tokens=4000)
+            if not response_text:
                 response_text = self._fallback_diagnosis_text(case, relevant_papers)
             
             # Parse JSON response

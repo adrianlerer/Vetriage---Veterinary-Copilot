@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: vetriage-api
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: cd rag_api && pip install -r requirements-render.txt
+    startCommand: cd rag_api && uvicorn fastapi_enhanced:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.8"
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        value: "anthropic/claude-3.5-sonnet"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: NCBI_API_KEY
+        sync: false
+      - key: NCBI_EMAIL
+        sync: false
+      - key: EMBEDDING_MODEL
+        value: "text-embedding-3-small"
+      - key: LLM_MODEL
+        value: "anthropic/claude-3.5-sonnet"
