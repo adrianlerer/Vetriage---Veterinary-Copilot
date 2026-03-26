@@ -15,7 +15,7 @@ from .models import TIER_CONFIG, ENDPOINT_COSTS_USD, Tier
 logger = logging.getLogger(__name__)
 
 # Endpoints that don't require auth
-PUBLIC_ENDPOINTS = {"/", "/docs", "/redoc", "/openapi.json", "/api/v2/health", "/api/v2/pricing"}
+PUBLIC_ENDPOINTS = {"/", "/docs", "/redoc", "/openapi.json", "/api/v2/health", "/api/v2/pricing", "/api/v2/register", "/terms", "/privacy", "/refund-policy"}
 
 # Map URL paths to endpoint names for tier checking
 ENDPOINT_NAMES = {
