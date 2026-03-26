@@ -17,7 +17,7 @@ License: MIT
 
 import os
 import logging
-from fastapi import FastAPI, HTTPException, BackgroundTasks, File, UploadFile
+from fastapi import FastAPI, HTTPException, BackgroundTasks, File, UploadFile, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
@@ -27,6 +27,14 @@ import tempfile
 
 # Import enhanced RAG system
 from enhanced_vetriage import EnhancedVetriageRAG, quick_diagnose
+
+# Import monetization layer
+from monetization.database import init_db, create_api_key, get_usage_summary, validate_api_key, update_tier, deactivate_key
+from monetization.models import Tier, TIER_CONFIG, ENDPOINT_COSTS_USD
+from monetization.middleware import APIKeyAuthMiddleware, RateLimitMiddleware, UsageTrackingMiddleware
+
+# Import legal pages (required by Paddle)
+from legal_pages import router as legal_router
 
 # Setup logging
 logging.basicConfig(
@@ -44,6 +52,15 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
+# Legal pages (public, no auth required — needed for Paddle verification)
+app.include_router(legal_router)
+
+# Middleware stack (order matters: auth → rate limit → usage tracking)
+# Usage tracking wraps the response, so it goes first (outermost)
+app.add_middleware(UsageTrackingMiddleware)
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(APIKeyAuthMiddleware)
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -59,8 +76,16 @@ enhanced_rag: Optional[EnhancedVetriageRAG] = None
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize enhanced RAG system on startup"""
+    """Initialize enhanced RAG system and billing database on startup"""
     global enhanced_rag
+
+    # Initialize billing database
+    try:
+        init_db()
+        logger.info("Billing database initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize billing DB: {e}")
+
     try:
         enhanced_rag = EnhancedVetriageRAG(
             enable_biorxiv=True,
@@ -68,9 +93,9 @@ async def startup_event():
             enable_visualizations=True,
             citation_style="apa"
         )
-        logger.info("✅ Enhanced VetrIAge RAG system initialized successfully")
+        logger.info("Enhanced VetrIAge RAG system initialized successfully")
     except Exception as e:
-        logger.error(f"❌ Failed to initialize RAG system: {e}")
+        logger.error(f"Failed to initialize RAG system: {e}")
         enhanced_rag = None
 
 
@@ -455,6 +480,127 @@ async def get_species_info(species: str):
     except Exception as e:
         logger.error(f"Species info error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Monetization Endpoints ====================
+
+class RegisterRequest(BaseModel):
+    email: str = Field(..., description="Owner email")
+    name: Optional[str] = Field(None, description="Owner name or clinic name")
+    tier: Tier = Field(Tier.FREE, description="Subscription tier")
+
+
+@app.get("/api/v2/pricing")
+async def get_pricing():
+    """Public endpoint: show available tiers and pricing"""
+    tiers = {}
+    for tier, config in TIER_CONFIG.items():
+        tiers[tier.value] = {
+            "name": config["name"],
+            "price_monthly_usd": config["price_monthly_usd"],
+            "requests_per_month": config["requests_per_month"],
+            "requests_per_minute": config["requests_per_minute"],
+            "features": {
+                "report_generation": config["report_generation"],
+                "literature_search": config["literature_search"],
+                "bibliography_export": config["bibliography_export"],
+                "priority_support": config["priority_support"],
+            },
+        }
+    return {
+        "service": "VetrIAge API",
+        "tiers": tiers,
+        "cost_per_endpoint": ENDPOINT_COSTS_USD,
+        "signup": "POST /api/v2/register",
+    }
+
+
+@app.post("/api/v2/register")
+async def register_api_key(request: RegisterRequest):
+    """
+    Register for an API key.
+    Returns the raw API key — store it securely, it's shown only once.
+    """
+    admin_secret = os.getenv("VETRIAGE_ADMIN_SECRET")
+
+    # For paid tiers, could integrate Stripe here; for now, admin-gated
+    if request.tier != Tier.FREE and not admin_secret:
+        raise HTTPException(
+            status_code=400,
+            detail="Paid tier registration requires contacting sales. Use tier='free' to get started.",
+        )
+
+    try:
+        key_id, raw_key = create_api_key(
+            owner_email=request.email,
+            owner_name=request.name,
+            tier=request.tier,
+        )
+        tier_config = TIER_CONFIG[request.tier]
+        return {
+            "status": "success",
+            "message": "API key created. Store it securely — it won't be shown again.",
+            "key_id": key_id,
+            "api_key": raw_key,
+            "tier": request.tier.value,
+            "limits": {
+                "requests_per_month": tier_config["requests_per_month"],
+                "requests_per_minute": tier_config["requests_per_minute"],
+            },
+            "usage": "Pass your key via X-API-Key header or ?api_key= query param.",
+        }
+    except Exception as e:
+        logger.error(f"Registration error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create API key.")
+
+
+@app.get("/api/v2/usage")
+async def get_usage(request: Request):
+    """Get usage dashboard for current API key. Requires auth."""
+    key_record = getattr(request.state, "api_key", None)
+    if not key_record:
+        raise HTTPException(status_code=401, detail="API key required")
+
+    summary = get_usage_summary(key_record.key_id)
+    tier_config = TIER_CONFIG[key_record.tier]
+
+    return {
+        "key_id": key_record.key_id,
+        "tier": key_record.tier.value,
+        "limits": {
+            "requests_per_month": tier_config["requests_per_month"],
+            "requests_per_minute": tier_config["requests_per_minute"],
+        },
+        "usage": summary,
+    }
+
+
+# ==================== Admin Endpoints ====================
+
+def _verify_admin(request: Request):
+    """Check for admin secret in X-Admin-Secret header."""
+    admin_secret = os.getenv("VETRIAGE_ADMIN_SECRET")
+    if not admin_secret:
+        raise HTTPException(status_code=503, detail="Admin not configured")
+    provided = request.headers.get("X-Admin-Secret")
+    if provided != admin_secret:
+        raise HTTPException(status_code=403, detail="Invalid admin secret")
+
+
+@app.post("/api/v2/admin/upgrade")
+async def admin_upgrade_tier(request: Request, key_id: str = Query(...), new_tier: Tier = Query(...)):
+    """Admin: upgrade a user's tier (after payment confirmation)."""
+    _verify_admin(request)
+    update_tier(key_id, new_tier)
+    return {"status": "success", "key_id": key_id, "new_tier": new_tier.value}
+
+
+@app.post("/api/v2/admin/deactivate")
+async def admin_deactivate(request: Request, key_id: str = Query(...)):
+    """Admin: deactivate an API key."""
+    _verify_admin(request)
+    deactivate_key(key_id)
+    return {"status": "success", "key_id": key_id, "active": False}
 
 
 # ==================== Run Server ====================

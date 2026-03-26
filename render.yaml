@@ -23,3 +23,11 @@ services:
         value: "text-embedding-3-small"
       - key: LLM_MODEL
         value: "anthropic/claude-3.5-sonnet"
+      - key: VETRIAGE_ADMIN_SECRET
+        generateValue: true
+      - key: VETRIAGE_DB_PATH
+        value: "/opt/render/project/data/vetriage_billing.db"
+    disk:
+      name: vetriage-data
+      mountPath: /opt/render/project/data
+      sizeGB: 1
