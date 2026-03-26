@@ -17,7 +17,7 @@ COMPANY = "Ignacio Adrian Lerer"
 CUIT = "20-18285589-9"
 BRAND = "VetrIAge"
 DOMAIN = "vetriage.com.ar"
-CONTACT_EMAIL = "legal@vetriage.com.ar"
+CONTACT_EMAIL = "adrian@lerer.com.ar"
 EFFECTIVE_DATE = "2025-07-01"
 
 _CSS = """
