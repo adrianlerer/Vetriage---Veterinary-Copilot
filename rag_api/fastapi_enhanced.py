@@ -17,7 +17,7 @@ License: MIT
 
 import os
 import logging
-from fastapi import FastAPI, HTTPException, BackgroundTasks, File, UploadFile, Depends, Query
+from fastapi import FastAPI, HTTPException, BackgroundTasks, File, UploadFile, Depends, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
