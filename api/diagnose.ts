@@ -74,14 +74,28 @@ interface DiagnosisResult {
 
 // ── LLM Provider Configuration ────────────────────────────
 
-function getLLMConfig() {
+interface LLMConfig {
+  url: string
+  key: string
+  provider: 'openrouter' | 'groq' | 'google'
+  model?: string
+  models?: string[]
+}
+
+function getLLMConfig(): LLMConfig | null {
   // Try providers in order of preference
   if (process.env.OPENROUTER_API_KEY) {
     return {
       url: 'https://openrouter.ai/api/v1/chat/completions',
       key: process.env.OPENROUTER_API_KEY,
-      // Google Gemma 4 27B - newest, strong reasoning, 262K context
-      model: process.env.LLM_MODEL || 'google/gemma-4-31b-it:free',
+      // Models to try in order of preference (fallback on rate limit)
+      models: [
+        'google/gemma-4-31b-it:free',              // Gemma 4 — newest Google model
+        'nvidia/nemotron-3-super-120b-a12b:free',   // Nemotron 120B — massive
+        'nousresearch/hermes-3-llama-3.1-405b:free', // 405B params
+        'meta-llama/llama-3.3-70b-instruct:free',   // Reliable fallback
+        'openai/gpt-oss-120b:free',                 // OpenAI open source 120B
+      ],
       provider: 'openrouter',
     }
   }
@@ -227,7 +241,7 @@ function buildUserMessage(c: ClinicalCaseInput): string {
 
 // ── LLM Call ──────────────────────────────────────────────
 
-async function callLLM(config: NonNullable<ReturnType<typeof getLLMConfig>>, userMessage: string): Promise<string> {
+async function callLLM(config: LLMConfig, userMessage: string): Promise<string> {
   if (config.provider === 'google') {
     // Google Gemini has a different API format
     const res = await fetch(config.url, {
@@ -262,28 +276,47 @@ async function callLLM(config: NonNullable<ReturnType<typeof getLLMConfig>>, use
     headers['X-Title'] = 'VetrIAge Veterinary Copilot'
   }
 
-  const res = await fetch(config.url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userMessage },
-      ],
-      temperature: 0.3,
-      max_tokens: 4096,
-      response_format: { type: 'json_object' },
-    }),
-  })
+  // For OpenRouter: try multiple models with fallback on rate limit
+  const modelsToTry = config.models && config.models.length > 0
+    ? config.models
+    : config.model
+      ? [config.model]
+      : ['meta-llama/llama-3.3-70b-instruct:free']
 
-  if (!res.ok) {
+  for (const model of modelsToTry) {
+    const res = await fetch(config.url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userMessage },
+        ],
+        temperature: 0.3,
+        max_tokens: 4096,
+        response_format: { type: 'json_object' },
+      }),
+    })
+
+    if (res.ok) {
+      const data = await res.json()
+      console.log(`Diagnosis generated using model: ${model}`)
+      return data.choices?.[0]?.message?.content || ''
+    }
+
+    // If rate limited (429) or unavailable (503), try next model
+    if (res.status === 429 || res.status === 503) {
+      console.log(`Model ${model} rate limited (${res.status}), trying next...`)
+      continue
+    }
+
+    // Other errors: throw immediately
     const err = await res.text()
     throw new Error(`LLM API error ${res.status}: ${err}`)
   }
 
-  const data = await res.json()
-  return data.choices?.[0]?.message?.content || ''
+  throw new Error('Todos los modelos de IA están temporalmente ocupados. Intente de nuevo en unos segundos.')
 }
 
 // ── Parse LLM Response ────────────────────────────────────
