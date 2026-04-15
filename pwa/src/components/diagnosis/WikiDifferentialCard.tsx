@@ -131,12 +131,16 @@ function ExpandedSectionView({ data, onClose }: { data: WikiExpandedSection; onC
         </div>
 
         {/* Content paragraphs */}
-        {content && (
+        {content ? (
           <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed space-y-3">
             {content.split('\n\n').filter(Boolean).map((p, i) => (
               <p key={i}>{p}</p>
             ))}
           </div>
+        ) : (
+          <p className="text-sm text-gray-400 dark:text-gray-500 italic">
+            La respuesta del modelo fue incompleta. Intente nuevamente o pruebe con otro diagnóstico.
+          </p>
         )}
 
         {/* Key Points */}
