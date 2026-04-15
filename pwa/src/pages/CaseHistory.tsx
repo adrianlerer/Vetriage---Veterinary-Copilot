@@ -33,7 +33,7 @@ export default function CaseHistory() {
           {caseHistory.map((h, i) => (
             <Link
               key={i}
-              to="/diagnostico"
+              to="/app/diagnostico"
               onClick={() => loadCase(i)}
               className="glass-card p-5 flex items-center justify-between hover:shadow-xl transition-all duration-200 group block"
             >

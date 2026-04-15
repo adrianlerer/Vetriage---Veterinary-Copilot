@@ -4,12 +4,12 @@ import Header from './Header'
 
 /** Map route paths to human-readable Spanish page titles. */
 const pageTitles: Record<string, string> = {
-  '/': 'Inicio',
-  '/nuevo-caso': 'Nuevo Caso',
-  '/historial': 'Historial de Casos',
-  '/seguridad-farmacologica': 'Seguridad Farmacologica',
-  '/literatura': 'Busqueda de Literatura',
-  '/configuracion': 'Configuracion',
+  '/app': 'Inicio',
+  '/app/nuevo-caso': 'Nuevo Caso',
+  '/app/historial': 'Historial de Casos',
+  '/app/seguridad-farmacologica': 'Seguridad Farmacologica',
+  '/app/literatura': 'Busqueda de Literatura',
+  '/app/configuracion': 'Configuracion',
 }
 
 export default function Layout() {

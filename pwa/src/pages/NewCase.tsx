@@ -21,7 +21,7 @@ export default function NewCase() {
       const result = await api.diagnose(clinicalCase)
       setCurrentDiagnosis(result)
       addToHistory(clinicalCase, result)
-      navigate('/diagnostico')
+      navigate('/app/diagnostico')
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al procesar el diagnóstico'
       setLocalError(msg)

@@ -8,6 +8,7 @@ import CaseHistory from './pages/CaseHistory'
 import DrugSafety from './pages/DrugSafety'
 import Literature from './pages/Literature'
 import Settings from './pages/Settings'
+import LandingPage from './pages/LandingPage'
 import { useStore } from './store/useStore'
 
 export default function App() {
@@ -25,16 +26,29 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<Layout />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/nuevo-caso" element={<NewCase />} />
-          <Route path="/diagnostico" element={<DiagnosisView />} />
-          <Route path="/historial" element={<CaseHistory />} />
-          <Route path="/seguridad-farmacologica" element={<DrugSafety />} />
-          <Route path="/literatura" element={<Literature />} />
-          <Route path="/configuracion" element={<Settings />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+        {/* Landing page */}
+        <Route path="/" element={<LandingPage />} />
+
+        {/* App routes */}
+        <Route path="/app" element={<Layout />}>
+          <Route index element={<Dashboard />} />
+          <Route path="nuevo-caso" element={<NewCase />} />
+          <Route path="diagnostico" element={<DiagnosisView />} />
+          <Route path="historial" element={<CaseHistory />} />
+          <Route path="seguridad-farmacologica" element={<DrugSafety />} />
+          <Route path="literatura" element={<Literature />} />
+          <Route path="configuracion" element={<Settings />} />
         </Route>
+
+        {/* Redirect old routes to /app */}
+        <Route path="/nuevo-caso" element={<Navigate to="/app/nuevo-caso" replace />} />
+        <Route path="/diagnostico" element={<Navigate to="/app/diagnostico" replace />} />
+        <Route path="/historial" element={<Navigate to="/app/historial" replace />} />
+        <Route path="/seguridad-farmacologica" element={<Navigate to="/app/seguridad-farmacologica" replace />} />
+        <Route path="/literatura" element={<Navigate to="/app/literatura" replace />} />
+        <Route path="/configuracion" element={<Navigate to="/app/configuracion" replace />} />
+
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   )

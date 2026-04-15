@@ -40,7 +40,7 @@ export default function Dashboard() {
           </div>
           <Stethoscope className="w-16 h-16 text-brand-200 opacity-50 hidden md:block" />
         </div>
-        <Link to="/nuevo-caso" className="inline-flex items-center gap-2 mt-6 px-6 py-3 bg-white text-brand-700 font-semibold rounded-xl hover:bg-brand-50 transition-colors">
+        <Link to="/app/nuevo-caso" className="inline-flex items-center gap-2 mt-6 px-6 py-3 bg-white text-brand-700 font-semibold rounded-xl hover:bg-brand-50 transition-colors">
           Nuevo Caso Clínico <ArrowRight className="w-4 h-4" />
         </Link>
       </div>
@@ -68,7 +68,7 @@ export default function Dashboard() {
             Casos Recientes
           </h2>
           {caseHistory.length > 0 && (
-            <Link to="/historial" className="text-brand-600 hover:text-brand-700 text-sm font-medium">
+            <Link to="/app/historial" className="text-brand-600 hover:text-brand-700 text-sm font-medium">
               Ver todos
             </Link>
           )}

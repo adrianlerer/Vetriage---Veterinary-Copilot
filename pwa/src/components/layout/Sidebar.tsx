@@ -12,11 +12,11 @@ import {
 import { useStore } from '../../store/useStore'
 
 const navItems = [
-  { to: '/nuevo-caso', label: 'Nuevo Caso', icon: PlusCircle },
-  { to: '/historial', label: 'Historial', icon: History },
-  { to: '/seguridad-farmacologica', label: 'Seguridad Farmacologica', icon: ShieldAlert },
-  { to: '/literatura', label: 'Literatura', icon: BookOpen },
-  { to: '/configuracion', label: 'Configuracion', icon: Settings },
+  { to: '/app/nuevo-caso', label: 'Nuevo Caso', icon: PlusCircle },
+  { to: '/app/historial', label: 'Historial', icon: History },
+  { to: '/app/seguridad-farmacologica', label: 'Seguridad Farmacologica', icon: ShieldAlert },
+  { to: '/app/literatura', label: 'Literatura', icon: BookOpen },
+  { to: '/app/configuracion', label: 'Configuracion', icon: Settings },
 ] as const
 
 export default function Sidebar() {
@@ -48,7 +48,7 @@ export default function Sidebar() {
       >
         {/* Logo */}
         <div className="flex h-16 items-center justify-between px-5">
-          <NavLink to="/" className="flex items-center gap-2.5 group">
+          <NavLink to="/app" className="flex items-center gap-2.5 group">
             <div className="relative flex items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 p-2 shadow-md shadow-brand-500/30 transition-shadow group-hover:shadow-brand-500/50">
               <HeartPulse className="h-5 w-5 text-white" />
               <Stethoscope className="absolute -bottom-1 -right-1 h-3.5 w-3.5 text-brand-300" />

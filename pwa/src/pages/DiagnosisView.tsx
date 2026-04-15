@@ -14,7 +14,7 @@ export default function DiagnosisView() {
         <p className="text-slate-500 dark:text-slate-400 mb-6">
           Creá un nuevo caso clínico para obtener un diagnóstico.
         </p>
-        <Link to="/nuevo-caso" className="btn-primary">
+        <Link to="/app/nuevo-caso" className="btn-primary">
           Nuevo Caso Clínico
         </Link>
       </div>
@@ -24,7 +24,7 @@ export default function DiagnosisView() {
   return (
     <div className="animate-fade-in">
       <div className="flex items-center gap-3 mb-6">
-        <Link to="/nuevo-caso" className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+        <Link to="/app/nuevo-caso" className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div>
