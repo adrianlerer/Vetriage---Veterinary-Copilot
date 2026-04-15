@@ -179,24 +179,66 @@ async function callLLM(config: LLMConfig, userMessage: string): Promise<string> 
   throw new Error('Todos los modelos están temporalmente ocupados.')
 }
 
-// ── Parse Response ────────────────────────────────────────
+// ── Robust JSON Repair ────────────────────────────────────
+
+function repairJSON(raw: string): any {
+  let s = raw.trim()
+  if (s.startsWith('```')) {
+    s = s.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
+  }
+  const firstBrace = s.indexOf('{')
+  if (firstBrace === -1) throw new Error('No JSON found')
+  s = s.substring(firstBrace)
+  s = s.replace(/,\s*([\]\}])/g, '$1')
+  s = s.replace(/(["'])\s*\n\s*(["'])/g, '$1 $2')
+
+  try { return JSON.parse(s) } catch { /* repair */ }
+
+  // Truncate to last safe position and close brackets
+  let inString = false, escapeNext = false, lastSafePos = 0
+  const stack: string[] = []
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]
+    if (escapeNext) { escapeNext = false; continue }
+    if (ch === '\\' && inString) { escapeNext = true; continue }
+    if (ch === '"' && !escapeNext) { inString = !inString; continue }
+    if (inString) continue
+    if (ch === '{') stack.push('}')
+    else if (ch === '[') stack.push(']')
+    else if (ch === '}' || ch === ']') { stack.pop(); lastSafePos = i + 1 }
+    else if (ch === ',') { lastSafePos = i }
+  }
+
+  if (lastSafePos <= 1) throw new Error('Cannot repair JSON')
+
+  let repaired = s.substring(0, lastSafePos).replace(/,\s*$/, '')
+  // Re-scan for open brackets
+  const openStack: string[] = []
+  inString = false; escapeNext = false
+  for (let i = 0; i < repaired.length; i++) {
+    const ch = repaired[i]
+    if (escapeNext) { escapeNext = false; continue }
+    if (ch === '\\' && inString) { escapeNext = true; continue }
+    if (ch === '"' && !escapeNext) { inString = !inString; continue }
+    if (inString) continue
+    if (ch === '{') openStack.push('}')
+    else if (ch === '[') openStack.push(']')
+    else if (ch === '}' || ch === ']') openStack.pop()
+  }
+  while (openStack.length > 0) repaired += openStack.pop()
+  repaired = repaired.replace(/,\s*([\]\}])/g, '$1')
+
+  return JSON.parse(repaired) // throws if still broken
+}
 
 function parseExpandResponse(raw: string): any {
-  let cleaned = raw.trim()
-  if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
-  }
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
-  if (jsonMatch) cleaned = jsonMatch[0]
-  cleaned = cleaned.replace(/,\s*([\]\}])/g, '$1')
-
   try {
-    return JSON.parse(cleaned)
+    return repairJSON(raw)
   } catch {
-    // Fallback: return raw content as-is
+    // Absolute fallback: return raw content
     return {
       title: 'Información expandida',
-      content: raw,
+      content: raw.replace(/[{}"\[\]]/g, '').trim(),
       keyPoints: [],
       references: [],
       relatedSections: [],
