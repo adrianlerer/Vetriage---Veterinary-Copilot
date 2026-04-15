@@ -36,7 +36,11 @@ export default function DiagnosisView() {
           )}
         </div>
       </div>
-      <DiagnosisResultView diagnosis={currentDiagnosis} />
+      <DiagnosisResultView
+        diagnosis={currentDiagnosis}
+        species={currentCase?.species}
+        breed={currentCase?.breed}
+      />
     </div>
   )
 }

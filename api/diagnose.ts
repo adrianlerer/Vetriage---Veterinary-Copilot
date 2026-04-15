@@ -33,10 +33,13 @@ interface DifferentialDiagnosis {
   diagnosis: string
   probability: number
   gradeScore: string
-  reasoning: string
+  oneLiner: string
   keyFindings: string[]
-  suggestedTests: string[]
-  treatment: string
+  wikiSections: string[]
+  // Legacy fields (kept for backward compat with expand)
+  reasoning?: string
+  suggestedTests?: string[]
+  treatment?: string
 }
 
 interface SafetyAlert {
@@ -121,58 +124,52 @@ function getLLMConfig(): LLMConfig | null {
 
 // ── System Prompt ─────────────────────────────────────────
 
-const SYSTEM_PROMPT = `Sos un sistema de diagnóstico veterinario basado en evidencia, diseñado para asistir a médicos veterinarios profesionales. Tu función es analizar casos clínicos y generar diagnósticos diferenciales con rigor científico.
+const SYSTEM_PROMPT = `Sos un copiloto veterinario basado en evidencia. Generás diagnósticos diferenciales CONCISOS estilo overview/wiki para veterinarios profesionales.
 
-IMPORTANTE:
-- Respondé SIEMPRE en español.
-- Usá terminología médica veterinaria precisa.
-- Basá tus diagnósticos en evidencia científica actual.
-- Incluí siempre el disclaimer de que es una herramienta de apoyo, no reemplaza el juicio clínico.
-- Sé específico con dosis, vías de administración y frecuencias.
-- Considerá siempre las contraindicaciones por especie y raza.
+RESPONDÉ EN ESPAÑOL. Terminología médica veterinaria precisa.
 
-Respondé EXCLUSIVAMENTE con un JSON válido (sin markdown, sin backticks, sin texto adicional) con esta estructura exacta:
+Formato de respuesta: JSON válido (sin markdown, sin backticks). Estructura:
 
 {
+  "summary": "Resumen ejecutivo del caso en 2-3 oraciones.",
   "differentials": [
     {
-      "diagnosis": "Nombre del diagnóstico",
+      "diagnosis": "Nombre",
       "probability": 45,
-      "gradeScore": "B – Evidencia moderada basada en signos clínicos",
-      "reasoning": "Explicación detallada de por qué este diagnóstico es compatible con los hallazgos...",
-      "keyFindings": ["Hallazgo clave 1", "Hallazgo clave 2"],
-      "suggestedTests": ["Test diagnóstico 1", "Test diagnóstico 2"],
-      "treatment": "Protocolo de tratamiento detallado con dosis específicas..."
+      "gradeScore": "B",
+      "oneLiner": "Descripción en UNA oración de por qué este dx es compatible.",
+      "keyFindings": ["Hallazgo 1", "Hallazgo 2"],
+      "wikiSections": ["fisiopatologia", "diagnostico", "tratamiento", "pronostico"]
     }
   ],
-  "treatmentPlan": {
-    "diagnosticPlan": ["Plan diagnóstico paso 1", "Paso 2"],
-    "treatmentPlan": ["Tratamiento paso 1", "Paso 2"],
-    "monitoring": ["Parámetro a monitorear 1", "Parámetro 2"],
-    "followUp": "Plan de seguimiento...",
-    "prognosis": "Pronóstico general..."
-  },
   "safetyAlerts": [
     {
       "severity": "HIGH",
-      "category": "Seguridad Farmacológica",
-      "title": "Título de la alerta",
-      "description": "Descripción detallada...",
-      "action": "Acción recomendada..."
+      "category": "Seguridad",
+      "title": "Título",
+      "description": "Breve",
+      "action": "Acción"
     }
   ],
-  "summary": "Resumen ejecutivo del caso y hallazgos principales..."
+  "treatmentPlan": {
+    "diagnosticPlan": ["Paso 1"],
+    "treatmentPlan": ["Paso 1"],
+    "monitoring": ["Param 1"],
+    "followUp": "Seguimiento",
+    "prognosis": "Pronóstico"
+  }
 }
 
-Reglas:
-1. Generá entre 2 y 5 diagnósticos diferenciales, ordenados por probabilidad.
-2. Las probabilidades deben sumar ~100%.
-3. Incluí alertas de seguridad cuando aplique (interacciones, contraindicaciones por especie/raza).
-4. Para razas con mutación MDR1 (Collie, Border Collie, Australian Shepherd, Shetland), SIEMPRE alertar sobre ivermectina.
-5. NUNCA recomendar paracetamol/acetaminofén en gatos.
-6. Incluí grados de evidencia (A=fuerte, B=moderada, C=débil, D=opinión experta).
-7. El gradeScore debe incluir la letra y una breve justificación.
-8. Si hay archivos adjuntos mencionados, indicar que deben ser evaluados por el profesional.`
+REGLAS CRÍTICAS:
+1. Máximo 3 diagnósticos diferenciales. Probabilidades suman ~100%.
+2. Cada diferencial lleva un "oneLiner" (1 oración) y "wikiSections" (array de secciones disponibles para expandir).
+3. NO incluir razonamientos extensos ni tratamientos detallados — eso se pide después via /expand.
+4. keyFindings: máximo 3 items por diferencial.
+5. gradeScore: solo la letra (A/B/C/D).
+6. Alertas de seguridad: solo CRITICAL y HIGH. MDR1 (Collie, Border Collie, Australian Shepherd) → alertar ivermectina. NUNCA paracetamol en gatos.
+7. treatmentPlan: máximo 3 items por array.
+8. Si hay adjuntos mencionados, indicar que requieren evaluación profesional.
+9. Respuesta total: MÁXIMO 800 tokens. Sé telegráfico.`
 
 // ── Build User Message ────────────────────────────────────
 
@@ -295,7 +292,7 @@ async function callLLM(config: LLMConfig, userMessage: string): Promise<string> 
           { role: 'user', content: userMessage },
         ],
         temperature: 0.3,
-        max_tokens: 4096,
+        max_tokens: 1500,
         response_format: { type: 'json_object' },
       }),
     })
@@ -378,12 +375,15 @@ function parseLLMResponse(raw: string): Partial<DiagnosisResult> {
   }
 
   // Validate and normalize differentials
-  const differentials: DifferentialDiagnosis[] = (parsed.differentials || []).map((d: any) => ({
+  const differentials: DifferentialDiagnosis[] = (parsed.differentials || []).slice(0, 3).map((d: any) => ({
     diagnosis: d.diagnosis || 'Diagnóstico no especificado',
     probability: typeof d.probability === 'number' ? d.probability : 20,
-    gradeScore: d.gradeScore || d.grade_score || 'D – Sin clasificar',
-    reasoning: d.reasoning || '',
-    keyFindings: Array.isArray(d.keyFindings || d.key_findings) ? (d.keyFindings || d.key_findings) : [],
+    gradeScore: d.gradeScore || d.grade_score || 'D',
+    oneLiner: d.oneLiner || d.one_liner || d.reasoning || '',
+    keyFindings: (Array.isArray(d.keyFindings || d.key_findings) ? (d.keyFindings || d.key_findings) : []).slice(0, 3),
+    wikiSections: Array.isArray(d.wikiSections || d.wiki_sections) ? (d.wikiSections || d.wiki_sections) : ['fisiopatologia', 'diagnostico', 'tratamiento', 'pronostico'],
+    // Legacy compat
+    reasoning: d.reasoning || d.oneLiner || '',
     suggestedTests: Array.isArray(d.suggestedTests || d.suggested_tests) ? (d.suggestedTests || d.suggested_tests) : [],
     treatment: d.treatment || '',
   }))

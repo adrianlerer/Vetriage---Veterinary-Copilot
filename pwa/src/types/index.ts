@@ -48,10 +48,24 @@ export interface DifferentialDiagnosis {
   diagnosis: string
   probability: number
   gradeScore: string
-  reasoning: string
+  oneLiner: string
   keyFindings: string[]
-  suggestedTests: string[]
-  treatment: string
+  wikiSections: string[]
+  // Legacy fields (backward compat)
+  reasoning?: string
+  suggestedTests?: string[]
+  treatment?: string
+}
+
+export interface WikiExpandedSection {
+  title: string
+  content: string
+  keyPoints: string[]
+  references: string[]
+  relatedSections: string[]
+  diagnosis: string
+  section: string
+  processingTime: number
 }
 
 export interface CitedPaper {

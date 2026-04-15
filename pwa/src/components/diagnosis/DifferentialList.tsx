@@ -129,14 +129,14 @@ export function DifferentialList({ differentials }: Props) {
                 )}
 
                 {/* Pruebas sugeridas */}
-                {dx.suggestedTests.length > 0 && (
+                {(dx.suggestedTests ?? []).length > 0 && (
                   <div className="mb-3">
                     <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                       <TestTube className="h-3.5 w-3.5" />
                       Pruebas sugeridas
                     </h4>
                     <ul className="space-y-1">
-                      {dx.suggestedTests.map((t, ti) => (
+                      {(dx.suggestedTests ?? []).map((t, ti) => (
                         <li
                           key={ti}
                           className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300"
