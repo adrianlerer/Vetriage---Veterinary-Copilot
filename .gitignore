@@ -91,3 +91,4 @@ tmp/
 
 # Scientific skills reference (large)
 # scientific-skills-ref/  # Uncomment if repo is too large
+.vercel
