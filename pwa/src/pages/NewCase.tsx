@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import CaseForm from '../components/case/CaseForm'
 import { useStore } from '../store/useStore'
-import { api } from '../api/client'
+import { diagnoseLocal } from '../api/diagnose-local'
 import type { ClinicalCase } from '../types'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 
@@ -18,7 +18,7 @@ export default function NewCase() {
     setCurrentCase(clinicalCase)
 
     try {
-      const result = await api.diagnose(clinicalCase)
+      const result = await diagnoseLocal(clinicalCase)
       setCurrentDiagnosis(result)
       addToHistory(clinicalCase, result)
       navigate('/app/diagnostico')

@@ -55,6 +55,15 @@ const CaseForm: React.FC<CaseFormProps> = ({ onSubmit, isLoading = false }) => {
   const prev = () => setStep((s) => Math.max(s - 1, 1));
 
   const handleSubmit = () => {
+    // Convert uploaded files to attachments format
+    const attachments = uploadedFiles.map((f) => ({
+      name: f.file.name,
+      type: f.file.type,
+      category: f.category,
+      size: f.file.size,
+      dataUrl: f.preview, // base64 data URL for images
+    }));
+
     const clinicalCase: ClinicalCase = {
       species,
       patientName,
@@ -70,6 +79,7 @@ const CaseForm: React.FC<CaseFormProps> = ({ onSubmit, isLoading = false }) => {
       labResults,
       currentMedications,
       physicalExam,
+      ...(attachments.length > 0 ? { attachments } : {}),
     };
     onSubmit(clinicalCase);
   };
