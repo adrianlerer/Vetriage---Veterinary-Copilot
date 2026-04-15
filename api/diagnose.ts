@@ -317,62 +317,160 @@ async function callLLM(config: LLMConfig, userMessage: string): Promise<string> 
   throw new Error('Todos los modelos de IA están temporalmente ocupados. Intente de nuevo en unos segundos.')
 }
 
+// ── Robust JSON Repair ────────────────────────────────────
+
+/**
+ * Repara JSON truncado o malformado del LLM.
+ * Estrategia: limpiar → intentar parse → si falla, truncar en último
+ * valor completo y cerrar todos los brackets abiertos.
+ */
+function repairJSON(raw: string): any {
+  // Step 1: Clean wrappers
+  let s = raw.trim()
+  if (s.startsWith('```')) {
+    s = s.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
+  }
+
+  // Step 2: Extract outermost { ... } (may be incomplete)
+  const firstBrace = s.indexOf('{')
+  if (firstBrace === -1) throw new Error('No se encontró JSON en la respuesta')
+  s = s.substring(firstBrace)
+
+  // Step 3: Fix common issues
+  s = s.replace(/,\s*([\]\}])/g, '$1')          // trailing commas
+  s = s.replace(/(["'])\s*\n\s*(["'])/g, '$1 $2') // broken strings
+
+  // Step 4: Try direct parse
+  try { return JSON.parse(s) } catch { /* continue to repair */ }
+
+  // Step 5: Truncate to last complete value, then close open brackets
+  // Walk the string tracking depth and string state
+  const stack: string[] = []  // tracks open brackets: '{' or '['
+  let inString = false
+  let escapeNext = false
+  let lastSafePos = 0  // position after last complete key:value or array element
+
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]
+    if (escapeNext) { escapeNext = false; continue }
+    if (ch === '\\' && inString) { escapeNext = true; continue }
+    if (ch === '"' && !escapeNext) {
+      inString = !inString
+      continue
+    }
+    if (inString) continue
+
+    if (ch === '{') stack.push('}')
+    else if (ch === '[') stack.push(']')
+    else if (ch === '}' || ch === ']') {
+      stack.pop()
+      // After closing a bracket at any depth, this is a safe cut point
+      lastSafePos = i + 1
+    } else if (ch === ',') {
+      // Comma between elements — safe to cut right before this comma
+      lastSafePos = i
+    }
+  }
+
+  // If we're inside a string, try to close it by finding last quote
+  if (inString) {
+    // Backtrack to find the opening quote of the incomplete string
+    const lastQuote = s.lastIndexOf('"', s.length - 1)
+    if (lastQuote > 0) {
+      // Find the position before this incomplete string value started
+      // Look backwards for : (object value) or , or [ (array element)
+      let cutPos = lastQuote
+      for (let j = lastQuote - 1; j >= 0; j--) {
+        if (s[j] === ':' || s[j] === ',' || s[j] === '[') {
+          cutPos = j
+          break
+        }
+      }
+      // If we hit a colon, we need to go back to before the key too
+      if (s[cutPos] === ':') {
+        // Go back past the key
+        for (let j = cutPos - 1; j >= 0; j--) {
+          if (s[j] === ',' || s[j] === '{') {
+            cutPos = s[j] === ',' ? j : j + 1
+            break
+          }
+        }
+      }
+      lastSafePos = cutPos
+    }
+  }
+
+  if (lastSafePos <= 1) {
+    throw new Error('No se pudo recuperar JSON truncado')
+  }
+
+  // Cut at safe position
+  let repaired = s.substring(0, lastSafePos)
+  // Remove any trailing comma
+  repaired = repaired.replace(/,\s*$/, '')
+
+  // Re-scan to determine what brackets are still open
+  const openStack: string[] = []
+  inString = false
+  escapeNext = false
+  for (let i = 0; i < repaired.length; i++) {
+    const ch = repaired[i]
+    if (escapeNext) { escapeNext = false; continue }
+    if (ch === '\\' && inString) { escapeNext = true; continue }
+    if (ch === '"' && !escapeNext) { inString = !inString; continue }
+    if (inString) continue
+    if (ch === '{') openStack.push('}')
+    else if (ch === '[') openStack.push(']')
+    else if (ch === '}' || ch === ']') openStack.pop()
+  }
+
+  // Close all open brackets
+  while (openStack.length > 0) {
+    repaired += openStack.pop()
+  }
+
+  // Final cleanup and parse
+  repaired = repaired.replace(/,\s*([\]\}])/g, '$1')
+
+  try {
+    return JSON.parse(repaired)
+  } catch (e2) {
+    // Last resort: try even more aggressive truncation
+    // Find the last complete object in differentials array
+    const diffMatch = repaired.match(/"differentials"\s*:\s*\[([\s\S]*)/)
+    if (diffMatch) {
+      // Find all complete objects in the array
+      const arrayContent = diffMatch[1]
+      const objects: string[] = []
+      let depth = 0, start = -1
+      let inStr = false, esc = false
+      for (let i = 0; i < arrayContent.length; i++) {
+        const c = arrayContent[i]
+        if (esc) { esc = false; continue }
+        if (c === '\\' && inStr) { esc = true; continue }
+        if (c === '"' && !esc) { inStr = !inStr; continue }
+        if (inStr) continue
+        if (c === '{') { if (depth === 0) start = i; depth++ }
+        if (c === '}') { depth--; if (depth === 0 && start >= 0) { objects.push(arrayContent.substring(start, i + 1)); start = -1 } }
+      }
+      if (objects.length > 0) {
+        // Build minimal valid response
+        return {
+          differentials: objects.map(o => { try { return JSON.parse(o) } catch { return null } }).filter(Boolean),
+          summary: 'Diagnóstico parcial (respuesta truncada del modelo).',
+          treatmentPlan: {},
+          safetyAlerts: [],
+        }
+      }
+    }
+    throw new Error(`No se pudo reparar JSON del modelo de IA: ${(e2 as Error).message}`)
+  }
+}
+
 // ── Parse LLM Response ────────────────────────────────────
 
 function parseLLMResponse(raw: string): Partial<DiagnosisResult> {
-  // Clean potential markdown wrappers
-  let cleaned = raw.trim()
-  if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
-  }
-
-  // Extract JSON object if surrounded by extra text
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
-  if (jsonMatch) {
-    cleaned = jsonMatch[0]
-  }
-
-  // Fix common LLM JSON issues:
-  // 1. Trailing commas before ] or }
-  cleaned = cleaned.replace(/,\s*([\]\}])/g, '$1')
-  // 2. Single quotes instead of double quotes (careful with contractions)
-  // 3. Unescaped newlines inside strings
-  cleaned = cleaned.replace(/(["'])\s*\n\s*(["'])/g, '$1 $2')
-
-  let parsed: any
-  try {
-    parsed = JSON.parse(cleaned)
-  } catch (e) {
-    // Last resort: try to truncate at the last complete object/array
-    // Find the last valid closing brace
-    let depth = 0
-    let lastValidPos = 0
-    let inString = false
-    let escapeNext = false
-    for (let i = 0; i < cleaned.length; i++) {
-      const ch = cleaned[i]
-      if (escapeNext) { escapeNext = false; continue }
-      if (ch === '\\' && inString) { escapeNext = true; continue }
-      if (ch === '"' && !escapeNext) { inString = !inString; continue }
-      if (inString) continue
-      if (ch === '{' || ch === '[') depth++
-      if (ch === '}' || ch === ']') {
-        depth--
-        if (depth === 0) lastValidPos = i + 1
-      }
-    }
-    if (lastValidPos > 0) {
-      try {
-        const truncated = cleaned.substring(0, lastValidPos)
-          .replace(/,\s*([\]\}])/g, '$1')
-        parsed = JSON.parse(truncated)
-      } catch {
-        throw new Error(`JSON inválido del modelo de IA: ${(e as Error).message}`)
-      }
-    } else {
-      throw new Error(`JSON inválido del modelo de IA: ${(e as Error).message}`)
-    }
-  }
+  const parsed = repairJSON(raw)
 
   // Validate and normalize differentials
   const differentials: DifferentialDiagnosis[] = (parsed.differentials || []).slice(0, 3).map((d: any) => ({
