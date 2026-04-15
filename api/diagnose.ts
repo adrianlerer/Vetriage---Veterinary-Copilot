@@ -329,7 +329,53 @@ function parseLLMResponse(raw: string): Partial<DiagnosisResult> {
     cleaned = cleaned.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
   }
 
-  const parsed = JSON.parse(cleaned)
+  // Extract JSON object if surrounded by extra text
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+  if (jsonMatch) {
+    cleaned = jsonMatch[0]
+  }
+
+  // Fix common LLM JSON issues:
+  // 1. Trailing commas before ] or }
+  cleaned = cleaned.replace(/,\s*([\]\}])/g, '$1')
+  // 2. Single quotes instead of double quotes (careful with contractions)
+  // 3. Unescaped newlines inside strings
+  cleaned = cleaned.replace(/(["'])\s*\n\s*(["'])/g, '$1 $2')
+
+  let parsed: any
+  try {
+    parsed = JSON.parse(cleaned)
+  } catch (e) {
+    // Last resort: try to truncate at the last complete object/array
+    // Find the last valid closing brace
+    let depth = 0
+    let lastValidPos = 0
+    let inString = false
+    let escapeNext = false
+    for (let i = 0; i < cleaned.length; i++) {
+      const ch = cleaned[i]
+      if (escapeNext) { escapeNext = false; continue }
+      if (ch === '\\' && inString) { escapeNext = true; continue }
+      if (ch === '"' && !escapeNext) { inString = !inString; continue }
+      if (inString) continue
+      if (ch === '{' || ch === '[') depth++
+      if (ch === '}' || ch === ']') {
+        depth--
+        if (depth === 0) lastValidPos = i + 1
+      }
+    }
+    if (lastValidPos > 0) {
+      try {
+        const truncated = cleaned.substring(0, lastValidPos)
+          .replace(/,\s*([\]\}])/g, '$1')
+        parsed = JSON.parse(truncated)
+      } catch {
+        throw new Error(`JSON inválido del modelo de IA: ${(e as Error).message}`)
+      }
+    } else {
+      throw new Error(`JSON inválido del modelo de IA: ${(e as Error).message}`)
+    }
+  }
 
   // Validate and normalize differentials
   const differentials: DifferentialDiagnosis[] = (parsed.differentials || []).map((d: any) => ({
