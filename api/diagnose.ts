@@ -90,11 +90,11 @@ function getLLMConfig(): LLMConfig | null {
       key: process.env.OPENROUTER_API_KEY,
       // Models to try in order of preference (fallback on rate limit)
       models: [
-        'google/gemma-4-31b-it:free',              // Gemma 4 — newest Google model
-        'nvidia/nemotron-3-super-120b-a12b:free',   // Nemotron 120B — massive
+        'meta-llama/llama-3.3-70b-instruct:free',   // Fast & reliable
+        'google/gemma-4-31b-it:free',               // Gemma 4 — newest Google
+        'nvidia/nemotron-3-super-120b-a12b:free',    // Nemotron 120B
         'nousresearch/hermes-3-llama-3.1-405b:free', // 405B params
-        'meta-llama/llama-3.3-70b-instruct:free',   // Reliable fallback
-        'openai/gpt-oss-120b:free',                 // OpenAI open source 120B
+        'openai/gpt-oss-120b:free',                  // OpenAI open source
       ],
       provider: 'openrouter',
     }
