@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, Component, type ReactNode } from 'react'
 import {
   ChevronDown,
   ChevronUp,
@@ -12,6 +12,7 @@ import {
   BookOpen,
   Lightbulb,
   ExternalLink,
+  AlertTriangle,
 } from 'lucide-react'
 import type { DifferentialDiagnosis, WikiExpandedSection } from '../../types'
 
@@ -34,13 +35,13 @@ const SECTION_META: Record<string, { label: string; icon: typeof Microscope; col
 }
 
 function probColor(p: number) {
-  if (p >= 50) return { bar: 'bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-400', ring: 'ring-emerald-500/20' }
-  if (p >= 25) return { bar: 'bg-amber-500', text: 'text-amber-700 dark:text-amber-400', ring: 'ring-amber-500/20' }
-  return { bar: 'bg-red-500', text: 'text-red-700 dark:text-red-400', ring: 'ring-red-500/20' }
+  if (p >= 50) return { bar: 'bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-400' }
+  if (p >= 25) return { bar: 'bg-amber-500', text: 'text-amber-700 dark:text-amber-400' }
+  return { bar: 'bg-red-500', text: 'text-red-700 dark:text-red-400' }
 }
 
 function GradeBadge({ score }: { score: string }) {
-  const letter = score.charAt(0).toUpperCase()
+  const letter = (score || 'D').charAt(0).toUpperCase()
   const colorMap: Record<string, string> = {
     A: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
     B: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
@@ -57,83 +58,142 @@ function GradeBadge({ score }: { score: string }) {
   )
 }
 
+// ── Error Boundary ────────────────────────────────────────
+
+class SectionErrorBoundary extends Component<
+  { children: ReactNode; onReset: () => void },
+  { hasError: boolean }
+> {
+  state = { hasError: false }
+  static getDerivedStateFromError() { return { hasError: true } }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/30">
+          <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            Error al mostrar la sección.
+          </p>
+          <button
+            onClick={() => { this.setState({ hasError: false }); this.props.onReset() }}
+            className="mt-2 text-xs text-red-500 underline"
+          >
+            Cerrar sección
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
+// ── Safe helpers ──────────────────────────────────────────
+
+function safeString(val: unknown): string {
+  if (typeof val === 'string') return val
+  if (val == null) return ''
+  try { return String(val) } catch { return '' }
+}
+
+function safeArray(val: unknown): string[] {
+  if (Array.isArray(val)) return val.map(v => safeString(v)).filter(Boolean)
+  return []
+}
+
+function safeNumber(val: unknown): number {
+  if (typeof val === 'number' && !isNaN(val)) return val
+  return 0
+}
+
 // ── Expanded Section View ─────────────────────────────────
 
 function ExpandedSectionView({ data, onClose }: { data: WikiExpandedSection; onClose: () => void }) {
+  const content = safeString(data?.content)
+  const title = safeString(data?.title) || 'Información expandida'
+  const keyPoints = safeArray(data?.keyPoints)
+  const references = safeArray(data?.references)
+  const time = safeNumber(data?.processingTime)
+
   return (
-    <div className="mt-3 rounded-lg border border-teal-200 bg-teal-50/50 p-4 dark:border-teal-800 dark:bg-teal-950/30">
-      <div className="flex items-center justify-between mb-3">
-        <h5 className="font-semibold text-sm text-teal-800 dark:text-teal-300 flex items-center gap-2">
-          <BookOpen className="h-4 w-4" />
-          {data.title}
-        </h5>
-        <button
-          onClick={onClose}
-          className="text-xs text-teal-600 hover:text-teal-800 dark:text-teal-400 dark:hover:text-teal-200"
-        >
-          Cerrar
-        </button>
-      </div>
-
-      {/* Content paragraphs */}
-      <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed space-y-3">
-        {data.content.split('\n\n').map((p, i) => (
-          <p key={i}>{p}</p>
-        ))}
-      </div>
-
-      {/* Key Points */}
-      {data.keyPoints.length > 0 && (
-        <div className="mt-4">
-          <h6 className="text-xs font-semibold uppercase tracking-wider text-teal-700 dark:text-teal-400 mb-2 flex items-center gap-1.5">
-            <Lightbulb className="h-3.5 w-3.5" />
-            Puntos clave
-          </h6>
-          <ul className="space-y-1">
-            {data.keyPoints.map((kp, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
-                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-500" />
-                {kp}
-              </li>
-            ))}
-          </ul>
+    <SectionErrorBoundary onReset={onClose}>
+      <div className="mt-3 rounded-lg border border-teal-200 bg-teal-50/50 p-4 dark:border-teal-800 dark:bg-teal-950/30">
+        <div className="flex items-center justify-between mb-3">
+          <h5 className="font-semibold text-sm text-teal-800 dark:text-teal-300 flex items-center gap-2">
+            <BookOpen className="h-4 w-4" />
+            {title}
+          </h5>
+          <button
+            onClick={onClose}
+            className="text-xs text-teal-600 hover:text-teal-800 dark:text-teal-400 dark:hover:text-teal-200"
+          >
+            Cerrar
+          </button>
         </div>
-      )}
 
-      {/* References */}
-      {data.references.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-teal-200/60 dark:border-teal-800/60">
-          <h6 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1.5 flex items-center gap-1.5">
-            <ExternalLink className="h-3 w-3" />
-            Referencias
-          </h6>
-          <ul className="space-y-0.5">
-            {data.references.map((ref, i) => (
-              <li key={i} className="text-xs text-gray-500 dark:text-gray-400 italic">
-                {ref}
-              </li>
+        {/* Content paragraphs */}
+        {content && (
+          <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed space-y-3">
+            {content.split('\n\n').filter(Boolean).map((p, i) => (
+              <p key={i}>{p}</p>
             ))}
-          </ul>
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* Processing time */}
-      <p className="mt-2 text-xs text-gray-400 dark:text-gray-500 text-right">
-        Generado en {(data.processingTime / 1000).toFixed(1)}s
-      </p>
-    </div>
+        {/* Key Points */}
+        {keyPoints.length > 0 && (
+          <div className="mt-4">
+            <h6 className="text-xs font-semibold uppercase tracking-wider text-teal-700 dark:text-teal-400 mb-2 flex items-center gap-1.5">
+              <Lightbulb className="h-3.5 w-3.5" />
+              Puntos clave
+            </h6>
+            <ul className="space-y-1">
+              {keyPoints.map((kp, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-500" />
+                  {kp}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* References */}
+        {references.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-teal-200/60 dark:border-teal-800/60">
+            <h6 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1.5 flex items-center gap-1.5">
+              <ExternalLink className="h-3 w-3" />
+              Referencias
+            </h6>
+            <ul className="space-y-0.5">
+              {references.map((ref, i) => (
+                <li key={i} className="text-xs text-gray-500 dark:text-gray-400 italic">
+                  {ref}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Processing time */}
+        {time > 0 && (
+          <p className="mt-2 text-xs text-gray-400 dark:text-gray-500 text-right">
+            Generado en {(time / 1000).toFixed(1)}s
+          </p>
+        )}
+      </div>
+    </SectionErrorBoundary>
   )
 }
 
 // ── Main Component ────────────────────────────────────────
 
 export function WikiDifferentialCard({ differential: dx, index, species, breed, caseContext }: Props) {
-  const [isOpen, setIsOpen] = useState(index === 0) // First one open by default
+  const [isOpen, setIsOpen] = useState(index === 0)
   const [expandedSections, setExpandedSections] = useState<Record<string, WikiExpandedSection>>({})
   const [loadingSection, setLoadingSection] = useState<string | null>(null)
   const [sectionError, setSectionError] = useState<string | null>(null)
 
-  const colors = probColor(dx.probability)
+  const colors = probColor(dx.probability ?? 0)
   const sections = dx.wikiSections || ['fisiopatologia', 'diagnostico', 'tratamiento', 'pronostico']
 
   const handleExpand = async (section: string) => {
@@ -166,13 +226,32 @@ export function WikiDifferentialCard({ differential: dx, index, species, breed, 
         throw new Error(body.error || `Error ${res.status}`)
       }
 
-      const data: WikiExpandedSection = await res.json()
+      const raw = await res.json()
+      
+      // Normalize the response — ensure all expected fields exist with safe types
+      const data: WikiExpandedSection = {
+        title: safeString(raw.title) || section,
+        content: safeString(raw.content),
+        keyPoints: safeArray(raw.keyPoints),
+        references: safeArray(raw.references),
+        relatedSections: safeArray(raw.relatedSections),
+        diagnosis: safeString(raw.diagnosis) || dx.diagnosis,
+        section: safeString(raw.section) || section,
+        processingTime: safeNumber(raw.processingTime),
+      }
+      
       setExpandedSections((prev) => ({ ...prev, [section]: data }))
     } catch (err) {
-      setSectionError(err instanceof Error ? err.message : 'Error al expandir')
+      setSectionError(err instanceof Error ? err.message : 'Error al expandir sección')
     } finally {
       setLoadingSection(null)
     }
+  }
+
+  const removeSection = (section: string) => {
+    const next = { ...expandedSections }
+    delete next[section]
+    setExpandedSections(next)
   }
 
   return (
@@ -188,7 +267,7 @@ export function WikiDifferentialCard({ differential: dx, index, species, breed, 
       >
         {/* Rank badge */}
         <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${colors.bar} text-white font-bold text-sm shadow-sm`}>
-          {dx.probability}%
+          {dx.probability ?? 0}%
         </div>
 
         <div className="min-w-0 flex-1">
@@ -214,13 +293,13 @@ export function WikiDifferentialCard({ differential: dx, index, species, breed, 
       {isOpen && (
         <div className="border-t border-gray-100 dark:border-gray-700 px-5 py-4 space-y-4">
           {/* Key Findings */}
-          {dx.keyFindings.length > 0 && (
+          {(dx.keyFindings ?? []).length > 0 && (
             <div>
               <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                 Hallazgos clave
               </h4>
               <div className="flex flex-wrap gap-2">
-                {dx.keyFindings.map((f, fi) => (
+                {(dx.keyFindings ?? []).map((f, fi) => (
                   <span
                     key={fi}
                     className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300"
@@ -247,7 +326,7 @@ export function WikiDifferentialCard({ differential: dx, index, species, breed, 
                 return (
                   <button
                     key={section}
-                    onClick={() => handleExpand(section)}
+                    onClick={(e) => { e.stopPropagation(); handleExpand(section) }}
                     disabled={isLoading}
                     className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-all ${
                       isExpanded
@@ -269,9 +348,12 @@ export function WikiDifferentialCard({ differential: dx, index, species, breed, 
 
           {/* ── Error ──────────────────────────────── */}
           {sectionError && (
-            <p className="text-xs text-red-500 dark:text-red-400">
-              {sectionError}
-            </p>
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/30">
+              <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" />
+                {sectionError}
+              </p>
+            </div>
           )}
 
           {/* ── Expanded Sections Content ──────────── */}
@@ -279,11 +361,7 @@ export function WikiDifferentialCard({ differential: dx, index, species, breed, 
             <ExpandedSectionView
               key={section}
               data={data}
-              onClose={() => {
-                const next = { ...expandedSections }
-                delete next[section]
-                setExpandedSections(next)
-              }}
+              onClose={() => removeSection(section)}
             />
           ))}
         </div>
